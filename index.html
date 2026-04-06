@@ -642,6 +642,13 @@ const prizes = [
 
 const segCount = prizes.length;
 const segAngle = 360 / segCount;
+
+// 名额限制：从 localStorage 恢复剩余名额
+let remainingCounts = JSON.parse(localStorage.getItem('orthoRemaining') || 'null');
+if (!remainingCounts) {
+  remainingCounts = prizes.map(p => p.count);
+  localStorage.setItem('orthoRemaining', JSON.stringify(remainingCounts));
+}
 let isSpinning = false;
 let currentRotation = 0;
 let spinsRemaining = localStorage.getItem('orthoHasSpun') === 'true' ? 0 : 1;
@@ -796,11 +803,25 @@ function spinWheel() {
   
   const canvas = document.getElementById('wheelCanvas');
   
-  // Weighted random selection: higher prizes are rarer
-  const weights = [2, 4, 7, 12, 18, 57]; // probability weights
+  // Weighted random selection with quota check
+  const weights = [2, 4, 7, 12, 18, 57];
   const totalWeight = weights.reduce((a, b) => a + b, 0);
   let random = Math.random() * totalWeight;
-  let selectedIndex = 0;
+  let selectedIndex = prizes.length - 1; // default: 参与奖
+
+  for (let i = 0; i < weights.length; i++) {
+    random -= weights[i];
+    if (random <= 0) {
+      // 名额未用完才分配该奖项，否则继续往后找
+      if (remainingCounts[i] > 0) {
+        selectedIndex = i;
+        remainingCounts[i]--;
+        localStorage.setItem('orthoRemaining', JSON.stringify(remainingCounts));
+        break;
+      }
+      // continue to next prize
+    }
+  }
   
   for (let i = 0; i < weights.length; i++) {
     random -= weights[i];
@@ -844,7 +865,7 @@ function showResult(index) {
   }
 
   // Save record
-  saveRecord(prize);
+  saveRecord(prize, index);
   renderRecords();
 }
 
@@ -855,12 +876,12 @@ function closeModal() {
 
 
 // Save spin record to localStorage
-function saveRecord(prize) {
+function saveRecord(prize, index) {
   const records = JSON.parse(localStorage.getItem('orthoRecords') || '[]');
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
   const time = `${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-  records.unshift({ level: prize.level, detail: prize.detail, time: time });
+  records.unshift({ level: prize.level, detail: prize.detail, time: time, remaining: remainingCounts[index] });
   // Keep last 50 records
   if (records.length > 50) records.length = 50;
   localStorage.setItem('orthoRecords', JSON.stringify(records));
