@@ -581,7 +581,7 @@ body::before {
         </div>
       </div>
       <div class="spins-indicator">
-        今日剩余抽奖次数: <strong id="spinsLeft">1</strong> 次
+        剩余抽奖次数: <strong id="spinsLeft">1</strong> 次
       </div>
     </section>
 
@@ -590,7 +590,7 @@ body::before {
       <div class="rules-box">
         <h3>活动规则</h3>
         <ul>
-          <li>每人每天限抽 1 次，中奖后凭记录到前台领取奖品</li>
+          <li>每人限抽 1 次，中奖后凭记录到前台领取奖品</li>
           <li>一等奖 3 名：胡姬花古法花生油1.8L + 金龙鱼御品珍珠米2.5KG / 舒克电动牙刷（二选一）</li>
           <li>二等奖 5 名：清风抽纸悬挂式 / 狮王细齿洁牙刷4支装（二选一）</li>
           <li>三等奖 10 名：品牌保温杯 / 精美陶瓷杯办公礼盒套装（二选一）</li>
@@ -631,7 +631,7 @@ const segCount = prizes.length;
 const segAngle = 360 / segCount;
 let isSpinning = false;
 let currentRotation = 0;
-let spinsRemaining = parseInt(localStorage.getItem('orthoSpins') ?? '1');
+let spinsRemaining = localStorage.getItem('orthoHasSpun') === 'true' ? 0 : 1;
 
 // Init
 function init() {
@@ -778,15 +778,6 @@ function renderPrizeCards() {
 
 // Update spins display
 function updateSpinsDisplay() {
-  const today = new Date().toDateString();
-  const savedDate = localStorage.getItem('orthoSpinsDate');
-  
-  if (savedDate !== today) {
-    spinsRemaining = 1;
-    localStorage.setItem('orthoSpins', '1');
-    localStorage.setItem('orthoSpinsDate', today);
-  }
-  
   document.getElementById('spinsLeft').textContent = spinsRemaining;
 }
 
@@ -795,13 +786,13 @@ function spinWheel() {
   if (isSpinning) return;
   
   if (spinsRemaining <= 0) {
-    showToast('今日抽奖次数已用完，明天再来吧!');
+    showToast('您已经参与过抽奖了，每人仅限一次哦!');
     return;
   }
   
   isSpinning = true;
   spinsRemaining--;
-  localStorage.setItem('orthoSpins', spinsRemaining.toString());
+  localStorage.setItem('orthoHasSpun', 'true');
   updateSpinsDisplay();
   
   const canvas = document.getElementById('wheelCanvas');
