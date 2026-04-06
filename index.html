@@ -646,15 +646,14 @@ const segCount = prizes.length;
 const segAngle = 360 / segCount;
 
 
-// ===== 后端状态管理（GitHub Contents API + CORS Proxy）=====
-const STATE_RAW_URL = 'https://raw.githubusercontent.com/Brucewang9981/lucky-wheel-ortho/main/state.json';
+// ===== 后端状态管理（GitHub Pages 静态 API）=====
+const STATE_URL = 'https://brucewang9981.github.io/lucky-wheel-ortho/api/state.json';
 let backendLoaded = false;
 
 // 从后端读取最新状态
 async function fetchState() {
   try {
-    // 用 no-cache 确保拿到最新数据
-    const resp = await fetch(STATE_RAW_URL + '?t=' + Date.now(), { cache: 'no-store' });
+    const resp = await fetch(STATE_URL + '?t=' + Date.now(), { cache: 'no-store' });
     if (resp.ok) {
       const state = await resp.json();
       if (state.remaining) {
@@ -670,44 +669,30 @@ async function fetchState() {
   return false;
 }
 
-// 将结果上报到后端（通过 CORS 代理）
+// 将结果上报到后端（通过 GitHub Issue API + CORS 代理）
 async function pushState() {
   try {
-    const payload = JSON.stringify({
-      remaining: remainingCounts,
-      timestamp: new Date().toISOString()
+    // 通过 GitHub Issue 上报抽奖记录
+    // GitHub Issue creation 是公开 API，支持匿名 CORS
+    const resp = await fetch('https://api.github.com/repos/Brucewang9981/lucky-wheel-ortho/issues', {
+      method: 'POST',
+      headers: { 'Accept': 'application/vnd.github.v3+json' },
+      body: JSON.stringify({
+        title: '抽奖记录-' + new Date().toISOString().replace(/[:.]/g, '-'),
+        body: JSON.stringify({
+          remaining: remainingCounts,
+          record: JSON.parse(localStorage.getItem('orthoRecords') || '[]')[0] || null,
+          timestamp: new Date().toISOString()
+        })
+      })
     });
-    // 使用多个 CORS 代理实现写入（通过 GitHub API）
-    // 主方案：通过 corsproxy.io 代理 GitHub API
-    const PROXY_URL = 'https://corsproxy.io/?';
-    const GITHUB_API = 'https://api.github.com/repos/Brucewang9981/lucky-wheel-ortho/contents/state.json';
-
-    // 1. 先读取当前版本
-    const readResp = await fetch(PROXY_URL + encodeURIComponent(GITHUB_API));
-    if (!readResp.ok) return false;
-    const readData = await readResp.json();
-
-    // 2. 写入更新
-    const updateBody = {
-      message: '抽奖更新 ' + new Date().toLocaleString('zh-CN'),
-      content: btoa(unescape(encodeURIComponent(payload))),
-      sha: readData.sha,
-      branch: 'main'
-    };
-
-    const writeResp = await fetch(PROXY_URL + encodeURIComponent(GITHUB_API), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateBody)
-    });
-
-    if (writeResp.ok) {
-      console.log('后端写入成功');
+    if (resp.ok) {
+      console.log('抽奖记录已上报');
       return true;
     }
-    console.warn('后端写入失败:', writeResp.status);
+    console.warn('上报失败:', resp.status);
   } catch (e) {
-    console.warn('后端写入异常:', e);
+    console.warn('上报异常:', e);
   }
   return false;
 }
