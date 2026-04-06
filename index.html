@@ -645,23 +645,93 @@ const prizes = [
 const segCount = prizes.length;
 const segAngle = 360 / segCount;
 
-// 名额限制：从 localStorage 恢复剩余名额
-let remainingCounts = JSON.parse(localStorage.getItem('orthoRemaining') || 'null');
-if (!remainingCounts) {
-  remainingCounts = prizes.map(p => p.count);
-  localStorage.setItem('orthoRemaining', JSON.stringify(remainingCounts));
+
+// ===== 后端状态管理（GitHub Contents API + CORS Proxy）=====
+const STATE_RAW_URL = 'https://raw.githubusercontent.com/Brucewang9981/lucky-wheel-ortho/main/state.json';
+let backendLoaded = false;
+
+// 从后端读取最新状态
+async function fetchState() {
+  try {
+    // 用 no-cache 确保拿到最新数据
+    const resp = await fetch(STATE_RAW_URL + '?t=' + Date.now(), { cache: 'no-store' });
+    if (resp.ok) {
+      const state = await resp.json();
+      if (state.remaining) {
+        remainingCounts = state.remaining;
+        backendLoaded = true;
+        console.log('已从后端加载名额:', remainingCounts);
+        return true;
+      }
+    }
+  } catch (e) {
+    console.warn('后端读取失败，使用本地:', e);
+  }
+  return false;
 }
+
+// 将结果上报到后端（通过 CORS 代理）
+async function pushState() {
+  try {
+    const payload = JSON.stringify({
+      remaining: remainingCounts,
+      timestamp: new Date().toISOString()
+    });
+    // 使用多个 CORS 代理实现写入（通过 GitHub API）
+    // 主方案：通过 corsproxy.io 代理 GitHub API
+    const PROXY_URL = 'https://corsproxy.io/?';
+    const GITHUB_API = 'https://api.github.com/repos/Brucewang9981/lucky-wheel-ortho/contents/state.json';
+
+    // 1. 先读取当前版本
+    const readResp = await fetch(PROXY_URL + encodeURIComponent(GITHUB_API));
+    if (!readResp.ok) return false;
+    const readData = await readResp.json();
+
+    // 2. 写入更新
+    const updateBody = {
+      message: '抽奖更新 ' + new Date().toLocaleString('zh-CN'),
+      content: btoa(unescape(encodeURIComponent(payload))),
+      sha: readData.sha,
+      branch: 'main'
+    };
+
+    const writeResp = await fetch(PROXY_URL + encodeURIComponent(GITHUB_API), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updateBody)
+    });
+
+    if (writeResp.ok) {
+      console.log('后端写入成功');
+      return true;
+    }
+    console.warn('后端写入失败:', writeResp.status);
+  } catch (e) {
+    console.warn('后端写入异常:', e);
+  }
+  return false;
+}
+
+let remainingCounts = prizes.map(p => p.count); // 默认值，会被后端覆盖
 let isSpinning = false;
 let currentRotation = 0;
 let spinsRemaining = localStorage.getItem('orthoHasSpun') === 'true' ? 0 : 1;
 
 // Init
-function init() {
+async function init() {
   drawWheel();
   createLightDots();
   createParticles();
   updateSpinsDisplay();
   renderRecords();
+  await fetchState(); // 从后端加载全局名额
+  updateRemainingDisplay();
+}
+
+// 显示剩余名额（方便管理员监控）
+function updateRemainingDisplay() {
+  const el = document.getElementById('remainingDisplay');
+  if (el) el.textContent = remainingCounts.map((c, i) => prizes[i].level + ':' + c).join('  ');
 }
 
 // Draw wheel on canvas
@@ -790,7 +860,7 @@ function updateSpinsDisplay() {
 }
 
 // Spin the wheel
-function spinWheel() {
+async function spinWheel() {
   if (isSpinning) return;
   
   if (spinsRemaining <= 0) {
@@ -818,15 +888,15 @@ function spinWheel() {
       if (remainingCounts[i] > 0) {
         selectedIndex = i;
         remainingCounts[i]--;
-        localStorage.setItem('orthoRemaining', JSON.stringify(remainingCounts));
         break;
       }
       // continue to next prize
     }
   }
-  
 
-  
+  // 写回后端
+  pushState();
+
   // Calculate rotation: aim for the selected segment
   // The pointer is at the top (12 o'clock), segments start from -90deg offset
   // Target angle: center of selected segment should align with top
