@@ -646,55 +646,98 @@ const segCount = prizes.length;
 const segAngle = 360 / segCount;
 
 
-// ===== 后端状态管理（GitHub Pages 静态 API）=====
-const STATE_URL = 'https://brucewang9981.github.io/lucky-wheel-ortho/api/state.json';
+// ===== 后端状态管理（GitHub API + CORS 代理）=====
+const CORS_PROXY = 'https://corsproxy.io/?url=';
+const STATE_RAW = 'https://raw.githubusercontent.com/Brucewang9981/lucky-wheel-ortho/main/state.json';
 let backendLoaded = false;
 
-// 从后端读取最新状态
+// 用户唯一标识
+function getUserId() {
+  let uid = localStorage.getItem('orthoUserId');
+  if (!uid) {
+    uid = 'u_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 8);
+    localStorage.setItem('orthoUserId', uid);
+  }
+  return uid;
+}
+
+// 从后端读取全局名额
 async function fetchState() {
   try {
-    const resp = await fetch(STATE_URL + '?t=' + Date.now(), { cache: 'no-store' });
+    const resp = await fetch(STATE_RAW + '?_=' + Date.now(), { cache: 'no-store' });
     if (resp.ok) {
       const state = await resp.json();
       if (state.remaining) {
         remainingCounts = state.remaining;
         backendLoaded = true;
-        console.log('已从后端加载名额:', remainingCounts);
+        console.log('后端名额:', remainingCounts);
         return true;
       }
     }
   } catch (e) {
-    console.warn('后端读取失败，使用本地:', e);
+    console.warn('读取后端失败:', e);
   }
   return false;
 }
 
-// 将结果上报到后端（通过 GitHub Issue API + CORS 代理）
-async function pushState() {
+// 通过 CORS 代理写入 GitHub（全局名额扣减 + 防重复抽奖）
+async function commitDraw(prizeIndex) {
   try {
-    // 通过 GitHub Issue 上报抽奖记录
-    // GitHub Issue creation 是公开 API，支持匿名 CORS
-    const resp = await fetch('https://api.github.com/repos/Brucewang9981/lucky-wheel-ortho/issues', {
-      method: 'POST',
-      headers: { 'Accept': 'application/vnd.github.v3+json' },
+    const GITHUB_API = 'https://api.github.com/repos/Brucewang9981/lucky-wheel-ortho/contents/state.json';
+
+    // 1. 读取当前 state.json 的 SHA
+    const readResp = await fetch(CORS_PROXY + encodeURIComponent(GITHUB_API));
+    if (!readResp.ok) return null;
+    const readData = await readResp.json();
+
+    // 2. 解析并更新
+    const state = JSON.parse(atob(readData.content));
+
+    // 检查是否已抽过
+    const uid = getUserId();
+    if (state.records && state.records.some(r => r.user_id === uid)) {
+      return { success: false, message: '您已参与过抽奖' };
+    }
+
+    // 检查名额
+    if (state.remaining[prizeIndex] <= 0 && prizeIndex < 5) {
+      return { success: false, message: '该奖项名额已用完' };
+    }
+
+    // 扣减名额
+    state.remaining[prizeIndex] = Math.max(0, state.remaining[prizeIndex] - 1);
+    state.total = (state.total || 0) + 1;
+
+    const levels = ['一等奖','二等奖','三等奖','四等奖','五等奖','参与奖'];
+    state.records = state.records || [];
+    state.records.push({
+      user_id: uid,
+      prize_index: prizeIndex,
+      prize: levels[prizeIndex],
+      time: new Date().toISOString()
+    });
+
+    // 3. 写回 GitHub
+    const newContent = btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+    const writeResp = await fetch(CORS_PROXY + encodeURIComponent(GITHUB_API), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title: '抽奖记录-' + new Date().toISOString().replace(/[:.]/g, '-'),
-        body: JSON.stringify({
-          remaining: remainingCounts,
-          record: JSON.parse(localStorage.getItem('orthoRecords') || '[]')[0] || null,
-          timestamp: new Date().toISOString()
-        })
+        message: 'lottery: ' + uid + ' -> ' + levels[prizeIndex],
+        content: newContent,
+        sha: readData.sha,
+        branch: 'main'
       })
     });
-    if (resp.ok) {
-      console.log('抽奖记录已上报');
-      return true;
+
+    if (writeResp.ok) {
+      return { success: true, remaining: state.remaining, prize: levels[prizeIndex] };
     }
-    console.warn('上报失败:', resp.status);
+    console.warn('写入失败:', writeResp.status);
   } catch (e) {
-    console.warn('上报异常:', e);
+    console.warn('后端写入异常:', e);
   }
-  return false;
+  return null;
 }
 
 let remainingCounts = prizes.map(p => p.count); // 默认值，会被后端覆盖
@@ -860,27 +903,28 @@ async function spinWheel() {
   
   const canvas = document.getElementById('wheelCanvas');
   
-  // Weighted random selection with quota check
+  // Step 1: 本地加权随机 + 名额检查
   const weights = [2, 4, 8, 14, 20, 52];
   const totalWeight = weights.reduce((a, b) => a + b, 0);
   let random = Math.random() * totalWeight;
-  let selectedIndex = prizes.length - 1; // default: 参与奖
-
+  let selectedIndex = prizes.length - 1;
   for (let i = 0; i < weights.length; i++) {
     random -= weights[i];
     if (random <= 0) {
-      // 名额未用完才分配该奖项，否则继续往后找
       if (remainingCounts[i] > 0) {
         selectedIndex = i;
         remainingCounts[i]--;
         break;
       }
-      // continue to next prize
     }
   }
 
-  // 写回后端
-  pushState();
+  // Step 2: 异步提交后端（全局名额扣减 + 防重复）
+  commitDraw(selectedIndex).then(result => {
+    if (result && !result.success && result.message) {
+      showToast(result.message);
+    }
+  });
 
   // Calculate rotation: aim for the selected segment
   // The pointer is at the top (12 o'clock), segments start from -90deg offset
