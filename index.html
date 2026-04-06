@@ -806,7 +806,7 @@ function spinWheel() {
   const canvas = document.getElementById('wheelCanvas');
   
   // Weighted random selection with quota check
-  const weights = [2, 4, 7, 12, 18, 57];
+  const weights = [2, 4, 8, 14, 20, 52];
   const totalWeight = weights.reduce((a, b) => a + b, 0);
   let random = Math.random() * totalWeight;
   let selectedIndex = prizes.length - 1; // default: 参与奖
@@ -825,13 +825,7 @@ function spinWheel() {
     }
   }
   
-  for (let i = 0; i < weights.length; i++) {
-    random -= weights[i];
-    if (random <= 0) {
-      selectedIndex = i;
-      break;
-    }
-  }
+
   
   // Calculate rotation: aim for the selected segment
   // The pointer is at the top (12 o'clock), segments start from -90deg offset
