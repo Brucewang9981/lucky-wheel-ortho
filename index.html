@@ -558,6 +558,29 @@ body::before {
   font-size: 14px;
   padding: 24px 0;
 }
+
+/* 重置按钮 */
+.reset-section {
+  text-align: center;
+  margin-top: 20px;
+  padding: 0 16px;
+}
+.reset-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.35);
+  font-size: 12px;
+  padding: 6px 20px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.reset-btn:hover {
+  border-color: #e74c3c;
+  color: #e74c3c;
+  background: rgba(231,76,60,0.08);
+}
+
 </style>
 </head>
 <body>
@@ -615,6 +638,10 @@ body::before {
         <li class="record-empty" id="recordEmpty">暂无抽奖记录</li>
       </ul>
     </section>
+
+    <div class="reset-section">
+      <button class="reset-btn" onclick="resetAll()">重置活动数据</button>
+    </div>
   </main>
 </div>
 
@@ -953,6 +980,15 @@ document.getElementById('modal').addEventListener('click', (e) => {
 
 // Init on load
 window.addEventListener('DOMContentLoaded', init);
+
+// 重置所有活动数据
+function resetAll() {
+  if (!confirm('确定要重置所有抽奖数据吗？\n包括抽奖次数、剩余名额、抽奖记录将全部清空。')) return;
+  localStorage.removeItem('orthoHasSpun');
+  localStorage.removeItem('orthoRemaining');
+  localStorage.removeItem('orthoRecords');
+  location.reload();
+}
 </script>
 </body>
 </html>
