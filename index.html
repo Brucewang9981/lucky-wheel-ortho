@@ -304,63 +304,6 @@ body::before {
   max-width: 700px;
 }
 
-.prize-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
-  margin-bottom: 28px;
-}
-
-.prize-card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 14px;
-  padding: 18px 16px;
-  backdrop-filter: blur(10px);
-  transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
-  position: relative;
-  overflow: hidden;
-}
-
-.prize-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, var(--prize-color, var(--gold-primary)), transparent);
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.prize-card:hover {
-  transform: translateY(-3px);
-  border-color: rgba(255,255,255,0.15);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-}
-
-.prize-card:hover::before { opacity: 1; }
-
-.prize-card .prize-level {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--prize-color, var(--gold-primary));
-  margin-bottom: 6px;
-  letter-spacing: 1px;
-}
-
-.prize-card .prize-name {
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.5;
-  color: var(--text-primary);
-}
-
-.prize-card .prize-count {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 8px;
-  font-weight: 300;
-}
 
 /* rules section */
 .rules-box {
@@ -548,7 +491,6 @@ body::before {
 /* responsive */
 @media (max-width: 600px) {
   .page-wrapper { padding: 20px 14px 40px; }
-  .prize-cards { grid-template-columns: 1fr; }
   .modal { padding: 32px 24px; }
 }
 
@@ -651,7 +593,6 @@ body::before {
     </section>
 
     <section class="info-section">
-      <div class="prize-cards" id="prizeCards"></div>
       <div class="rules-box">
         <h3>活动规则</h3>
         <ul>
@@ -710,7 +651,6 @@ function init() {
   drawWheel();
   createLightDots();
   createParticles();
-  renderPrizeCards();
   updateSpinsDisplay();
   renderRecords();
 }
@@ -834,20 +774,6 @@ function createParticles() {
 }
 
 // Render prize info cards
-function renderPrizeCards() {
-  const container = document.getElementById('prizeCards');
-  prizes.forEach(p => {
-    const card = document.createElement('div');
-    card.className = 'prize-card';
-    card.style.setProperty('--prize-color', p.color);
-    card.innerHTML = `
-      <div class="prize-level">${p.level}</div>
-      <div class="prize-name">${p.name}</div>
-      <div class="prize-count">${p.count === 999 ? '名额不限' : '共 ' + p.count + ' 名'}</div>
-    `;
-    container.appendChild(card);
-  });
-}
 
 // Update spins display
 function updateSpinsDisplay() {
